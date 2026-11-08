@@ -170,3 +170,189 @@ fn test_zero_amount_deposit_fails() {
 
     println!("Zero amount deposit correctly rejected!");
 }
+
+
+#[test]
+fn test_withdraw_and_invalid_withdrawals() {
+    let program_id = vault::id();
+    let user = Keypair::new();
+
+    let (vault_state, _) = Pubkey::find_program_address(
+        &[b"state", user.pubkey().as_ref()],
+        &program_id,
+    );
+
+    let (vault_account, _) = Pubkey::find_program_address(
+        &[b"vault", vault_state.as_ref()],
+        &program_id,
+    );
+
+    let mut svm = LiteSVM::new();
+
+    let bytes = include_bytes!(concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/../deploy/vault.so"
+    ));
+
+    svm.add_program(program_id, bytes).unwrap();
+    svm.airdrop(&user.pubkey(), 1_000_000_000).unwrap();
+
+    // 1. Initialize the vault.
+    let initialize_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Initialize {}.data(),
+        vault::accounts::Initialize {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[initialize_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(svm.send_transaction(tx).is_ok());
+
+    // 2. Deposit 0.1 SOL.
+    let deposit_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Deposit {
+            amount: 100_000_000,
+        }
+        .data(),
+        vault::accounts::Deposit {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[deposit_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(svm.send_transaction(tx).is_ok());
+
+    let balance_before = svm.get_account(&vault_account).unwrap().lamports;
+
+    // 3. Withdraw 0.04 SOL.
+    let withdraw_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Withdraw {
+            amount: 40_000_000,
+        }
+        .data(),
+        vault::accounts::Withdraw {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[withdraw_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    let result = svm.send_transaction(tx);
+    assert!(result.is_ok(), "Withdrawal failed");
+
+    let balance_after = svm.get_account(&vault_account).unwrap().lamports;
+
+    assert_eq!(balance_after, balance_before - 40_000_000);
+
+    // 4. Attempt to withdraw more than the available balance.
+    let excessive_withdraw_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Withdraw {
+            amount: 200_000_000,
+        }
+        .data(),
+        vault::accounts::Withdraw {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[excessive_withdraw_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(
+        svm.send_transaction(tx).is_err(),
+        "Excessive withdrawal should fail"
+    );
+
+    // 5. Attempt a zero-amount withdrawal.
+    let zero_withdraw_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Withdraw { amount: 0 }.data(),
+        vault::accounts::Withdraw {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[zero_withdraw_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(
+        svm.send_transaction(tx).is_err(),
+        "Zero withdrawal should fail"
+    );
+
+    println!("Withdrawal and invalid withdrawal tests passed!");
+}

@@ -20,4 +20,7 @@ pub mod vault {
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         instructions::deposit::handle_deposit(ctx, amount)
     }
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        instructions::withdraw::handle_withdraw(ctx, amount)
+    }
 }

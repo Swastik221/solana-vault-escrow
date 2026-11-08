@@ -463,3 +463,94 @@ fn test_refund_escrow() {
 
     println!("Escrow refund test passed!");
   }
+
+
+
+#[test]
+fn test_make_rejects_identical_mints() {
+    let program_id = escrow::id();
+
+    let maker = Keypair::new();
+    let maker_pubkey = maker.pubkey();
+
+    let (escrow_pda, _) = Pubkey::find_program_address(
+        &[b"escrow", maker_pubkey.as_ref()],
+        &program_id,
+    );
+
+    let mut svm = setup_svm();
+    load_escrow_program(&mut svm);
+
+    svm.airdrop(&maker_pubkey, 5_000_000_000).unwrap();
+
+    // Create one mint and use it as both Token A and Token B.
+    let mint = CreateMint::new(&mut svm, &maker)
+        .authority(&maker_pubkey)
+        .decimals(6)
+        .send()
+        .unwrap();
+
+    let maker_token_a =
+        CreateAssociatedTokenAccount::new(&mut svm, &maker, &mint)
+            .send()
+            .unwrap();
+
+    MintTo::new(
+        &mut svm,
+        &maker,
+        &mint,
+        &maker_token_a,
+        1_000_000_000,
+    )
+    .send()
+    .unwrap();
+
+    let vault =
+        associated_token::get_associated_token_address(&escrow_pda, &mint);
+
+    let make_ix = Instruction::new_with_bytes(
+        program_id,
+        &escrow::instruction::Make {
+            amount: 500_000_000,
+            receive: 250_000_000,
+        }
+        .data(),
+        escrow::accounts::Make {
+            maker: maker_pubkey,
+            escrow: escrow_pda,
+            mint_a: mint,
+            mint_b: mint,
+            maker_token_a,
+            vault,
+            token_program: anchor_spl::token::ID,
+            associated_token_program: associated_token::ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[make_ix],
+        Some(&maker_pubkey),
+        &svm.latest_blockhash(),
+    );
+
+    let transaction = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&maker],
+    )
+    .unwrap();
+
+    let result = svm.send_transaction(transaction);
+
+    assert!(
+        result.is_err(),
+        "Make should reject identical Token A and Token B mints"
+    );
+
+    // Failed transaction must not create the escrow or vault.
+    assert!(svm.get_account(&escrow_pda).is_none());
+    assert!(svm.get_account(&vault).is_none());
+
+    println!("Identical mint rejection test passed!");
+}

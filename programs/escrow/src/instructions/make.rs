@@ -45,6 +45,11 @@ pub struct Make<'info> {
 
 pub fn handle_make(ctx: Context<Make>, amount: u64, receive: u64) -> Result<()> {
     require!(amount > 0 && receive > 0, EscrowError::InvalidAmount);
+    require_keys_neq!(
+        ctx.accounts.mint_a.key(),
+        ctx.accounts.mint_b.key(),
+        EscrowError::InvalidMint
+    );
 
     // Save the terms of the exchange.
     let escrow = &mut ctx.accounts.escrow;
@@ -62,10 +67,7 @@ pub fn handle_make(ctx: Context<Make>, amount: u64, receive: u64) -> Result<()> 
         authority: ctx.accounts.maker.to_account_info(),
     };
 
-    let cpi_ctx = CpiContext::new(
-      ctx.accounts.token_program.key(),
-      cpi_accounts,
-  );
+    let cpi_ctx = CpiContext::new(ctx.accounts.token_program.key(), cpi_accounts);
     token::transfer(cpi_ctx, amount)?;
 
     msg!("Escrow offer created successfully");
@@ -73,5 +75,4 @@ pub fn handle_make(ctx: Context<Make>, amount: u64, receive: u64) -> Result<()> 
     msg!("Token B expected: {}", receive);
 
     Ok(())
-
 }

@@ -23,4 +23,7 @@ pub mod escrow {
     pub fn take(ctx: Context<Take>) -> Result<()> {
         instructions::take::handle_take(ctx)
     }
+    pub fn refund(ctx: Context<Refund>) -> Result<()> {
+        instructions::refund::handle_refund(ctx)
+    }
 }

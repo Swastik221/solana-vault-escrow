@@ -326,3 +326,140 @@ fn test_take_escrow() {
 
   println!("Escrow take test passed!");
 }
+
+
+#[test]
+fn test_refund_escrow() {
+    let program_id = escrow::id();
+
+    let maker = Keypair::new();
+    let maker_pubkey = maker.pubkey();
+
+    let (escrow_pda, _) = Pubkey::find_program_address(
+        &[b"escrow", maker_pubkey.as_ref()],
+        &program_id,
+    );
+
+    let mut svm = setup_svm();
+    load_escrow_program(&mut svm);
+
+    svm.airdrop(&maker_pubkey, 5_000_000_000).unwrap();
+
+    // Create Token A and Token B mints.
+    let mint_a = CreateMint::new(&mut svm, &maker)
+        .authority(&maker_pubkey)
+        .decimals(6)
+        .send()
+        .unwrap();
+
+    let mint_b = CreateMint::new(&mut svm, &maker)
+        .authority(&maker_pubkey)
+        .decimals(6)
+        .send()
+        .unwrap();
+
+    // Create maker's Token A account.
+    let maker_token_a =
+        CreateAssociatedTokenAccount::new(&mut svm, &maker, &mint_a)
+            .send()
+            .unwrap();
+
+    // Give maker 1,000 Token A.
+    MintTo::new(
+        &mut svm,
+        &maker,
+        &mint_a,
+        &maker_token_a,
+        1_000_000_000,
+    )
+    .send()
+    .unwrap();
+
+    let vault =
+        associated_token::get_associated_token_address(&escrow_pda, &mint_a);
+
+    let amount = 500_000_000u64;
+    let receive = 250_000_000u64;
+
+    // STEP 1: Maker creates an escrow offer.
+    let make_ix = Instruction::new_with_bytes(
+        program_id,
+        &escrow::instruction::Make { amount, receive }.data(),
+        escrow::accounts::Make {
+            maker: maker_pubkey,
+            escrow: escrow_pda,
+            mint_a,
+            mint_b,
+            maker_token_a,
+            vault,
+            token_program: anchor_spl::token::ID,
+            associated_token_program: associated_token::ID,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let make_message = Message::new_with_blockhash(
+        &[make_ix],
+        Some(&maker_pubkey),
+        &svm.latest_blockhash(),
+    );
+
+    let make_transaction = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(make_message),
+        &[&maker],
+    )
+    .unwrap();
+
+    svm.send_transaction(make_transaction)
+        .expect("Make instruction failed");
+
+    // STEP 2: Maker cancels the offer using refund.
+    let refund_ix = Instruction::new_with_bytes(
+        program_id,
+        &escrow::instruction::Refund {}.data(),
+        escrow::accounts::Refund {
+            maker: maker_pubkey,
+            escrow: escrow_pda,
+            mint_a,
+            vault,
+            maker_token_a,
+            token_program: anchor_spl::token::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let refund_message = Message::new_with_blockhash(
+        &[refund_ix],
+        Some(&maker_pubkey),
+        &svm.latest_blockhash(),
+    );
+
+    let refund_transaction = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(refund_message),
+        &[&maker],
+    )
+    .unwrap();
+
+    svm.send_transaction(refund_transaction)
+        .expect("Refund instruction failed");
+
+    // STEP 3: Verify maker received all deposited Token A back.
+    let maker_a =
+        get_spl_account::<SplAccount>(&svm, &maker_token_a).unwrap();
+
+    assert_eq!(maker_a.amount, 1_000_000_000);
+
+    // STEP 4: Verify vault and escrow state were closed.
+    assert!(
+        svm.get_account(&vault).is_none(),
+        "Vault should be closed"
+    );
+
+    assert!(
+        svm.get_account(&escrow_pda).is_none(),
+        "Escrow state should be closed"
+    );
+
+    println!("Escrow refund test passed!");
+  }

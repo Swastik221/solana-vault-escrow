@@ -1,9 +1,16 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ErrorCode {
-    #[msg("Only the counter authority can update this counter")]
+pub enum EscrowError {
+    #[msg("Unauthorized access")]
     Unauthorized,
-    #[msg("Counter has reached the maximum value")]
-    CounterOverflow,
+
+    #[msg("Invalid token amount")]
+    InvalidAmount,
+
+    #[msg("Maker and taker token accounts must be different")]
+    InvalidTokenAccount,
+
+    #[msg("Invalid token mint")]
+    InvalidMint,
 }

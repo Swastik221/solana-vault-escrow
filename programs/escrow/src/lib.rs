@@ -5,9 +5,7 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-pub use constants::*;
 pub use instructions::*;
-pub use state::*;
 
 declare_id!("T89b167ssQxwDN8W4o19Xk3mjdDSWoMpMemL3HjHNm5");
 
@@ -15,11 +13,11 @@ declare_id!("T89b167ssQxwDN8W4o19Xk3mjdDSWoMpMemL3HjHNm5");
 pub mod escrow {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::handle_initialize(ctx)
-    }
-
-    pub fn increment(ctx: Context<Increment>) -> Result<()> {
-        crate::instructions::increment::handle_increment(ctx)
+    pub fn make(
+        ctx: Context<Make>,
+        amount: u64,
+        receive: u64,
+    ) -> Result<()> {
+        instructions::make::handle_make(ctx, amount, receive)
     }
 }

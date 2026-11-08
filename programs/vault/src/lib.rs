@@ -16,4 +16,8 @@ pub mod vault {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         instructions::initialize::handle_initialize(ctx)
     }
+
+    pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
+        instructions::deposit::handle_deposit(ctx, amount)
+    }
 }

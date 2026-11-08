@@ -5,9 +5,7 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-pub use constants::*;
 pub use instructions::*;
-pub use state::*;
 
 declare_id!("EQANduK3KtQnBCN6tnGvbR2hARLyrkcV7kNGsTPX3gnE");
 
@@ -16,10 +14,6 @@ pub mod vault {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::handle_initialize(ctx)
-    }
-
-    pub fn increment(ctx: Context<Increment>) -> Result<()> {
-        crate::instructions::increment::handle_increment(ctx)
+        instructions::initialize::handle_initialize(ctx)
     }
 }

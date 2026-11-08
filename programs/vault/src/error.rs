@@ -1,9 +1,16 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ErrorCode {
-    #[msg("Only the counter authority can update this counter")]
+pub enum VaultError {
+    #[msg("Unauthorized access")]
     Unauthorized,
-    #[msg("Counter has reached the maximum value")]
-    CounterOverflow,
+
+    #[msg("Invalid deposit amount")]
+    InvalidAmount,
+
+    #[msg("Insufficient vault balance")]
+    InsufficientBalance,
+
+    #[msg("Vault balance cannot be reduced below rent-exempt minimum")]
+    RentExemptionViolation,
 }

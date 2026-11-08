@@ -356,3 +356,133 @@ fn test_withdraw_and_invalid_withdrawals() {
 
     println!("Withdrawal and invalid withdrawal tests passed!");
 }
+
+
+#[test]
+fn test_close_vault() {
+    let program_id = vault::id();
+    let user = Keypair::new();
+
+    let (vault_state, _) = Pubkey::find_program_address(
+        &[b"state", user.pubkey().as_ref()],
+        &program_id,
+    );
+
+    let (vault_account, _) = Pubkey::find_program_address(
+        &[b"vault", vault_state.as_ref()],
+        &program_id,
+    );
+
+    let mut svm = LiteSVM::new();
+
+    let bytes = include_bytes!(concat!(
+        env!("CARGO_TARGET_TMPDIR"),
+        "/../deploy/vault.so"
+    ));
+
+    svm.add_program(program_id, bytes).unwrap();
+    svm.airdrop(&user.pubkey(), 1_000_000_000).unwrap();
+
+    // 1. Initialize the vault.
+    let initialize_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Initialize {}.data(),
+        vault::accounts::Initialize {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[initialize_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(svm.send_transaction(tx).is_ok());
+
+    // 2. Deposit SOL so the vault has funds to return.
+    let deposit_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Deposit {
+            amount: 100_000_000,
+        }
+        .data(),
+        vault::accounts::Deposit {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[deposit_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    assert!(svm.send_transaction(tx).is_ok());
+
+    // 3. Confirm both accounts exist before closing.
+    assert!(svm.get_account(&vault_state).is_some());
+    assert!(svm.get_account(&vault_account).is_some());
+
+    // 4. Close the vault.
+    let close_ix = Instruction::new_with_bytes(
+        program_id,
+        &vault::instruction::Close {}.data(),
+        vault::accounts::Close {
+            user: user.pubkey(),
+            vault_state,
+            vault: vault_account,
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+    );
+
+    let message = Message::new_with_blockhash(
+        &[close_ix],
+        Some(&user.pubkey()),
+        &svm.latest_blockhash(),
+    );
+
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[&user],
+    )
+    .unwrap();
+
+    let result = svm.send_transaction(tx);
+
+    assert!(result.is_ok(), "Vault close failed");
+
+    // 5. Both accounts should now be closed.
+    assert!(
+        svm.get_account(&vault_state).is_none(),
+        "VaultState account should be closed"
+    );
+
+    assert!(
+        svm.get_account(&vault_account).is_none(),
+        "Vault PDA should be drained and closed"
+    );
+
+    println!("Vault close test passed!");
+}

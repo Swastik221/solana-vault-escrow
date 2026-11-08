@@ -20,4 +20,7 @@ pub mod escrow {
     ) -> Result<()> {
         instructions::make::handle_make(ctx, amount, receive)
     }
+    pub fn take(ctx: Context<Take>) -> Result<()> {
+        instructions::take::handle_take(ctx)
+    }
 }

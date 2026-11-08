@@ -7,7 +7,9 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
+escrow = "T89b167ssQxwDN8W4o19Xk3mjdDSWoMpMemL3HjHNm5"
 solana_vault_escrow = "AbnxjjLeCEgN2W1XW4wKzdKcWFdchjdpXZjKbWydHFEx"
+vault = "EQANduK3KtQnBCN6tnGvbR2hARLyrkcV7kNGsTPX3gnE"
 
 [provider]
 cluster = "localnet"
